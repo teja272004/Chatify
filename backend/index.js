@@ -13,7 +13,20 @@ const OpenAI = require("openai");
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+
+// ✅ Improved CORS Configuration
+const allowedOrigins = [
+  "http://localhost:3000", // Local development
+  "https://chatify-frontend-a1hh.onrender.com", // Render frontend
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
+  })
+);
 
 // ✅ Connect to MongoDB
 mongoose
@@ -33,8 +46,15 @@ app.get("/", (req, res) => {
 
 // ✅ Create HTTP Server
 const server = http.createServer(app);
+
+// ✅ Improved Socket.io Configuration
 const io = new Server(server, {
-  cors: { origin: "http://localhost:3000" }, // Allow frontend connection
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
+    transports: ["websocket", "polling"],
+  },
 });
 
 // ✅ OpenAI API Initialization
@@ -51,6 +71,7 @@ io.on("connection", (socket) => {
 
   // 📌 User Joins & is Marked as Online
   socket.on("join", (userId) => {
+    if (!userId) return;
     socket.join(userId);
     onlineUsers.set(userId, socket.id);
     io.emit("userList", Array.from(onlineUsers.keys())); // Send updated user list
@@ -91,6 +112,10 @@ io.on("connection", (socket) => {
         });
       } catch (error) {
         console.error("AI Chat Error:", error);
+        io.to(data.senderId).emit("chat message", {
+          sender: "AI",
+          text: "Sorry, I encountered an error.",
+        });
       }
     } else {
       io.to(data.receiverId).emit("chat message", data);
@@ -137,6 +162,7 @@ io.on("connection", (socket) => {
       }
     }
     io.emit("userList", Array.from(onlineUsers.keys())); // Update user list
+    console.log(`❌ User disconnected: ${disconnectedUser}`);
   });
 });
 
